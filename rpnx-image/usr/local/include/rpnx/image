@@ -1,0 +1,385 @@
+#ifndef RPNX_IMAGE_HH
+#define RPNX_IMAGE_HH
+#include <vector>
+#include <utility>
+#include <tuple>
+#include <functional>
+
+#include <rpnx/pixel>
+
+namespace rpnx
+{
+
+  uint8_t itou(int8_t i)
+  {
+    if (i < 0) return -(i*2) -1;
+    else return i*2;
+  }
+
+  int8_t utoi(uint8_t i)
+  {
+    size_t j = i >> 1;
+    if (i & 1)
+      {
+        return -(j+1);
+      }
+    else 
+      {
+        return j;
+      }
+  }
+
+
+  std::vector< std::vector<uint8_t> > split(std::vector<uint8_t> const & input, size_t c)
+  {
+    std::vector<std::vector<uint8_t>> output;
+    output.resize(c);
+  
+    size_t a = 0;
+    size_t b = 0;
+    for ( ; a != input.size(); a++, b++)
+      {
+        if (b == c) b = 0;
+      output.at(b).push_back(input.at(a));
+      }
+    return output;
+  }
+
+  std::vector<uint8_t> join(std::vector< std::vector<uint8_t> > inputs)
+  {
+    size_t i = 0;
+    std::vector<uint8_t> output;
+    bool go = true;
+    while (go)
+      {
+        for (size_t j = 0; j != inputs.size(); j++)
+          {
+            if (i >= inputs[j].size()) 
+              {
+                go = false;
+                break;
+              }
+            output.push_back(inputs[j][i]);
+          }
+        i++;
+      }
+    return output;
+  }
+  
+
+  template <typename T, typename Allocator = std::allocator<T>>
+  class basic_image
+    //  : private Allocator
+  {
+    static_assert(std::is_same<typename Allocator::value_type, T>::value, "Undefined behavior?");
+  public:
+    using key_type = std::pair<size_t, size_t>;
+    using value_type = T;
+  private:
+    using image_type = basic_image<T, Allocator>;
+  private:
+    size_t w_;
+    size_t h_;
+    std::vector<T, Allocator> data_;
+
+  public:
+    class const_iterator
+    {
+      friend class basic_image<T, Allocator>;
+      image_type const* p;
+      size_t i;
+
+    protected:
+      const_iterator(image_type const *pa, size_t ia)
+        : p(pa), i(ia)
+      {}
+    public:
+
+      const_iterator() noexcept : p(nullptr), i(0) {}
+      const_iterator(const_iterator const &) = default;
+      const_iterator(const_iterator &&) = default;
+
+      const_iterator & operator = (const_iterator const &) = default;
+      const_iterator & operator = (const_iterator &&) = default;
+      
+      const_iterator & operator ++ () { i++; return *this; }
+      const_iterator & operator --() { --i; return *this; }
+      const_iterator operator--(int) { const_iterator a = *this; --(*this); return a; }
+      const_iterator operator++(int) { const_iterator a = *this; ++(*this); return a; }
+
+      bool operator <(const_iterator const & a) const noexcept
+      {
+        if (p < a.p) return true;
+        if (p > a.p) return false;
+        if (i < a.i) return true;
+        return false;
+      }
+
+      bool operator >(const_iterator const & a) const noexcept { return a < (*this); }
+      bool operator ==(const_iterator const & a) const noexcept { return a.p == p && a.i == i;  }
+      bool operator !=(const_iterator const & a) const noexcept { return !(*this == a);  }
+      bool operator <=(const_iterator const & other) const noexcept { return *this < other || *this == other;  }
+      bool operator >=(const_iterator const & other) const noexcept { return *this > other || *this == other;  }
+      
+      const_iterator operator +(ssize_t n) const & 
+      {
+        const_iterator copy = *this;
+        copy.i += n;
+        return copy;
+      }
+
+      const_iterator operator -(ssize_t n) const & 
+      {
+        return *this + -n;
+      }
+
+      const_iterator && operator +(ssize_t n) &&
+      {
+        *this += n;
+        return *this;
+      }
+
+      const_iterator & operator += (ssize_t n) { i += n; return *this; }
+      const_iterator & operator -= (ssize_t n) { i -= n; return *this; }
+
+      value_type const & operator *() const
+      {
+        return p->operator[](p->xy_of(i));
+      }
+      
+      value_type const * operator ->() const
+      {
+        return &(**this);
+      }
+
+      size_t x() const
+      {
+        assert(p);
+        return p->x_of(i);
+      }
+
+      size_t y() const
+      {
+        assert(p);
+        return p->y_of(i);
+      }
+
+      void x(size_t a)
+      {
+        assert(p != nullptr);
+        key_type xy = p->xy_of(i);
+        std::get<0>(xy) = a;
+        i = p->index_of(xy);
+      }
+
+
+      image_type const & image() const
+      {
+        return *p;
+      }
+
+    };
+
+    class iterator
+      : public const_iterator
+    {
+      friend class basic_image<T, Allocator>;
+    private:
+      iterator (image_type * p, size_t i)
+        : const_iterator(p, i)
+      {        
+      }
+      //  iterator(p, 
+    public:
+      iterator() noexcept : const_iterator() {}
+      iterator(iterator const & other) = default;
+      iterator(iterator &&) = default;
+
+      iterator & operator = (iterator const &) = default;
+      iterator & operator = (iterator &&) = default;
+
+      value_type & operator *() const { return const_cast<value_type&>(this->const_iterator::operator*()); }
+      value_type * operator ->() const { return const_cast<value_type*>(this->const_iterator::operator->()); }
+
+    };
+
+   
+
+    basic_image()
+      : basic_image(0,0)
+    {}
+
+    basic_image(image_type const & other)
+      : w_(other.width()), h_(other.height()), data_(other.data_)
+    {
+      
+    }
+
+    basic_image(size_t w, size_t h)
+      : w_(w), h_(h)
+    {
+      data_.resize(w*h);
+    }
+
+
+    basic_image(size_t w, size_t h, T const * input)
+      : w_(w), h_(h), data_(input, input+w*h)
+    {
+      assert(data_.size() == w_*h_); 
+    }
+
+
+    
+    template <typename It>
+    basic_image(size_t w, size_t h, It begin, It end)
+      : w_(w), h_(h), data_(begin, end)
+    {
+      assert(data_.size() == w_*h_);
+      if (data_.size() != w_*h_) { throw std::invalid_argument("alksjdf"); }
+    }
+
+    basic_image(size_t w, size_t h, std::function<T(size_t, size_t)> functor)
+      : w_(w), h_(h)
+    {
+      data_.reserve(w*h);
+      for (size_t i = 0; i != w*h; i++)
+        {
+          size_t a = x_of(i);
+          size_t b = y_of(i);
+          data_.push_back(functor(a, b));
+        }
+    }
+
+    bool bounds(size_t a, size_t b) const { return bounds({a, b}); }
+
+    bool bounds(key_type k) const
+    {
+      if (k.first >= w_) return false;
+      if (k.second >= h_) return false;
+      return true;
+    }
+
+    auto const & vector() const
+    {
+      return data_;
+    }
+
+    void resize(size_t w, size_t h)
+    {
+      basic_image<T, Allocator> img(w, h, [&](size_t x, size_t y){
+          if (this->bounds(w, h)) return  std::move((*this)[{x, y}]);
+          else return value_type();
+        });
+    }
+
+    auto  & vector()
+    {
+      return data_;
+    }
+
+    size_t height() const
+    {
+      return h_;
+    }
+
+    size_t width() const
+    {
+      return w_;
+    }
+
+
+    size_t index_of(size_t x, size_t y) const
+    {
+      return index_of({x, y});
+    }
+
+    size_t index_of(key_type k) const
+    {
+      assert(std::get<0>(k) < width());
+      assert(std::get<1>(k) < height());
+      size_t i = std::get<0>(k) + std::get<1>(k) * width();
+      assert(i < data_.size());
+      return i;
+    }
+
+    key_type xy_of(size_t i) const
+    {
+      return {x_of(i), y_of(i)};
+    }
+    
+    size_t x_of(size_t i) const
+    {
+      return i%w_;
+    }
+    
+    size_t y_of(size_t i) const
+    {
+      return i/w_;
+    }
+
+    T& operator[](key_type a)
+    {
+      return data_[index_of(a)];
+    }
+
+    T const& operator[](key_type a) const
+    {
+      return data_[index_of(a)];
+    }
+
+    bool operator == (basic_image<T> const & other) const
+    {
+      if (other.width() != width()) return false;
+      if (other.height() != height()) return false;
+      if (data_ != other.data_) return false;
+      return true;
+    }
+    
+    size_t size() const
+    {
+      assert(w_*h_ == data_.size());
+      return w_*h_;
+    }
+
+    void swap(basic_image<T> & other)
+    {
+      std::swap(w_, other.w_);
+      std::swap(h_, other.h_);
+      std::swap(data_, other.data_);
+    }
+
+    basic_image<T> & operator = (basic_image<T> && other)
+    {
+      swap(other);
+      return *this;
+    }
+
+    basic_image<T> & operator= (basic_image<T> const & other)
+    {
+      basic_image<T> copy (other);
+      swap(copy);
+      return *this;
+    }
+ 
+
+    iterator begin()
+    {
+      return iterator(this, 0);
+    }
+    iterator end()
+    {
+      return iterator(this, size());
+    }
+
+    const_iterator begin() const { return cbegin(); }
+    const_iterator end() const { return cend(); }
+
+    const_iterator cbegin() const { return const_iterator(this, 0); }
+    const_iterator cend() const { return const_iterator(this, size()); }
+
+  };
+
+  using image = basic_image<rgba_pixel>;
+}
+
+#endif

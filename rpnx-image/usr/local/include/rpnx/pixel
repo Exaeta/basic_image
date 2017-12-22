@@ -1,0 +1,23 @@
+#ifndef RPNX_PIXEL_HH
+#define RPNX_PIXEL_HH
+#include <tuple>
+#include <array>
+namespace rpnx
+{
+  struct rgba_pixel
+    : public std::array<uint8_t, 4>
+  {
+    auto & red() { return std::get<0>(*this); }
+    auto & green() { return std::get<1>(*this); }
+    auto & blue() { return std::get<2>(*this); }
+    auto & alpha() { return std::get<3>(*this); }
+
+    auto const & red() const { return std::get<0>(*this); }
+    auto const & green() const { return std::get<1>(*this); }
+    auto const & blue() const { return std::get<2>(*this); }
+    auto const & alpha() const { return std::get<3>(*this); }
+  };
+
+  
+}
+#endif
