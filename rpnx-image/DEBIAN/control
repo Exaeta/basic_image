@@ -1,0 +1,6 @@
+Package: rpnx-image
+Version: 1.0.0
+Maintainer: Ryan Nicholl <exaeta@protonmail.com>
+Architecture: all
+Description: Provides some C++ image headers.
+  Provides <rpnx/image> and <rpnx/pixel>.
