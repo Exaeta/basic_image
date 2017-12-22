@@ -34,13 +34,13 @@ namespace rpnx
   {
     std::vector<std::vector<uint8_t>> output;
     output.resize(c);
-  
+
     size_t a = 0;
     size_t b = 0;
     for ( ; a != input.size(); a++, b++)
       {
         if (b == c) b = 0;
-      output.at(b).push_back(input.at(a));
+        output.at(b).push_back(input.at(a));
       }
     return output;
   }
@@ -270,6 +270,16 @@ namespace rpnx
           if (this->bounds(w, h)) return  std::move((*this)[{x, y}]);
           else return value_type();
         });
+    }
+
+    basic_image<T, Allocator> subimage(size_t x, size_t y, size_t w, size_t h) const
+    {
+      basic_image<T, Allocator> copy(w, h, [&](size_t x2, size_t y2) {
+          assert(bounds(x+x2, y+y2));
+          return this->operator[](x+x2, y+y2);
+        });
+
+      return copy;
     }
 
     auto  & vector()
